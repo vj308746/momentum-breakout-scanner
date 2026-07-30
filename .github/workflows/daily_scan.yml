@@ -27,6 +27,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Validate required secrets
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          test -n "$UPSTOX_ACCESS_TOKEN" || {
+            echo "::error::UPSTOX_ACCESS_TOKEN is missing in this repository"
+            exit 1
+          }
+          test -n "$TELEGRAM_BOT_TOKEN" || {
+            echo "::error::TELEGRAM_BOT_TOKEN is missing in this repository"
+            exit 1
+          }
+          test -n "$TELEGRAM_CHAT_ID" || {
+            echo "::error::TELEGRAM_CHAT_ID is missing in this repository"
+            exit 1
+          }
+
+      - name: Verify Telegram bot authentication
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "from telegram_alert import validate_telegram_configuration; validate_telegram_configuration(); print('Telegram bot authentication: OK')"
+
       - name: Run scanner
         env:
           DATA_SOURCE: upstox

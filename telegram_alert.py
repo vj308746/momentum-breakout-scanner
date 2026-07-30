@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 
 import requests
@@ -13,6 +14,66 @@ from config import (
 # Telegram's documented text limit is 4096 characters.
 # Keep some margin for safety.
 TELEGRAM_SAFE_MESSAGE_LENGTH = 3800
+TELEGRAM_TOKEN_PATTERN = re.compile(
+    r"^[0-9]+:[A-Za-z0-9_-]{20,}$"
+)
+
+
+def _telegram_error(
+    response: requests.Response,
+    operation: str,
+) -> RuntimeError:
+    try:
+        payload = response.json()
+        description = str(
+            payload.get(
+                "description",
+                response.text,
+            )
+        )
+    except (ValueError, TypeError):
+        description = response.text or response.reason
+    return RuntimeError(
+        f"Telegram {operation} failed "
+        f"(HTTP {response.status_code}): {description}"
+    )
+
+
+def validate_telegram_configuration() -> dict[str, object]:
+    """Validate secret shape and authenticate the bot before a long scan."""
+    token = TELEGRAM_BOT_TOKEN.strip()
+    chat_id = TELEGRAM_CHAT_ID.strip()
+
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is empty")
+    if not TELEGRAM_TOKEN_PATTERN.fullmatch(token):
+        raise RuntimeError(
+            "TELEGRAM_BOT_TOKEN has an invalid format. Store only the "
+            "complete BotFather token: digits, colon and token characters; "
+            "do not include 'bot', a URL, quotes or variable-name text."
+        )
+    if not chat_id:
+        raise RuntimeError("TELEGRAM_CHAT_ID is empty")
+    if not re.fullmatch(r"-?[0-9]+", chat_id):
+        raise RuntimeError(
+            "TELEGRAM_CHAT_ID must contain only the numeric private-chat "
+            "ID or the complete negative group ID."
+        )
+
+    response = requests.get(
+        "https://api.telegram.org/"
+        f"bot{token}/getMe",
+        timeout=30,
+    )
+    if not response.ok:
+        raise _telegram_error(response, "getMe")
+    payload = response.json()
+    if not payload.get("ok"):
+        raise RuntimeError(
+            "Telegram getMe failed: "
+            + str(payload.get("description", "unknown error"))
+        )
+    return payload
 
 
 def _split_oversized_block(
@@ -173,15 +234,7 @@ def split_telegram_message(
 def send_telegram_message(
     message: str,
 ) -> None:
-    if not TELEGRAM_BOT_TOKEN.strip():
-        raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN is empty"
-        )
-
-    if not TELEGRAM_CHAT_ID.strip():
-        raise RuntimeError(
-            "TELEGRAM_CHAT_ID is empty"
-        )
+    validate_telegram_configuration()
 
     endpoint = (
         "https://api.telegram.org/"
@@ -213,7 +266,11 @@ def send_telegram_message(
             timeout=30,
         )
 
-        response.raise_for_status()
+        if not response.ok:
+            raise _telegram_error(
+                response,
+                f"sendMessage chunk {index}/{len(chunks)}",
+            )
 
         payload = response.json()
 

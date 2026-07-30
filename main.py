@@ -399,7 +399,13 @@ def main() -> None:
 
             data = (
                 download_stock_data(
-                    data_symbol
+                    data_symbol,
+                    yahoo_fallback_symbol=str(
+                        row.get(
+                            "Yahoo Symbol",
+                            symbol + ".NS",
+                        )
+                    ).strip(),
                 )
             )
 

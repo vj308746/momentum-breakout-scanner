@@ -194,6 +194,7 @@ def _download_yahoo_data(
 
 def download_stock_data(
     symbol: str,
+    yahoo_fallback_symbol: str | None = None,
 ) -> pd.DataFrame:
     if DATA_SOURCE == "upstox":
         try:
@@ -213,7 +214,8 @@ def download_stock_data(
             )
 
             return _download_yahoo_data(
-                symbol
+                yahoo_fallback_symbol
+                or symbol
             )
 
     if DATA_SOURCE == "yahoo":
