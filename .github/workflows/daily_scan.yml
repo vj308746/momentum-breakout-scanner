@@ -1,0 +1,52 @@
+name: Momentum Breakout Scan
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 1:00 PM UTC = 6:30 PM IST
+    - cron: '0 4 * * 1-5'
+    - cron: "0 13 * * 1-5"
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scanner
+        env:
+          DATA_SOURCE: upstox
+          ALLOW_YAHOO_FALLBACK: "true"
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FUNDAMENTALS_CSV_URL: ${{ secrets.FUNDAMENTALS_CSV_URL }}
+          FUNDAMENTALS_GATE_MODE: advisory
+          PATTERN_ENGINE_ENABLED: "true"
+          BULL_FLAG_ENABLED: "false"
+        run: python main.py
+
+      - name: Upload reports and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: momentum-breakout-scan-${{ github.run_number }}
+          path: |
+            reports/
+            logs/
+          if-no-files-found: warn
+          retention-days: 14
