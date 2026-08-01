@@ -238,10 +238,15 @@ def finalise_breakout_report(report: pd.DataFrame) -> pd.DataFrame:
         frame.get("RS Score", 0),
         errors="coerce",
     ).fillna(0)
+    liquidity = frame.get(
+        "Liquidity Eligible",
+        pd.Series(False, index=frame.index),
+    ).fillna(False).astype(bool)
 
     frame["Breakout Scanner Eligible"] = (
         (pattern | movement)
         & rs.ge(BREAKOUT_MIN_RS_SCORE)
+        & liquidity
     )
     frame["Qualified Scanner"] = "Not Qualified"
     frame.loc[pattern & ~movement, "Qualified Scanner"] = "Pattern Breakout"

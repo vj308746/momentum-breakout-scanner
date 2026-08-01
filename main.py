@@ -33,6 +33,7 @@ from config import (
     WATCHLIST_TEXT_FILE,
 )
 from decision_engine import add_trade_decisions
+from liquidity import add_liquidity_gate
 from downloader import (
     download_stock_data,
     load_stock_universe,
@@ -586,6 +587,16 @@ def main() -> None:
             add_vcp_combined_flags(
                 report
             )
+        )
+
+        report = add_liquidity_gate(
+            report
+        )
+        logging.info(
+            "Liquidity gate completed | Eligible: %s | "
+            "Excluded: %s",
+            int(report["Liquidity Eligible"].sum()),
+            int((~report["Liquidity Eligible"]).sum()),
         )
 
         report = add_fundamentals_gate(

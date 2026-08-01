@@ -203,6 +203,24 @@ SECTOR_RS_THRESHOLD = 60
 
 
 # ============================================================
+# LIQUIDITY GATE
+# ============================================================
+
+# Hard eligibility rules for the momentum scanner. Average daily
+# traded value is calculated as current price multiplied by the
+# 20-session average volume.
+MIN_PRICE = _env_float(
+    "MIN_PRICE",
+    50.0,
+)
+
+MIN_AVG_TURNOVER_VALUE = _env_float(
+    "MIN_AVG_TURNOVER_VALUE",
+    20000000.0,
+)
+
+
+# ============================================================
 # HISTORICAL VOLUME ANALYSIS
 # ============================================================
 
