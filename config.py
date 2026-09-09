@@ -246,6 +246,20 @@ MAX_PIVOT_EXTENSION_PCT = 5.0
 
 
 # ============================================================
+# SWING SETUP ENGINE
+# ============================================================
+
+SWING_LOOKBACK_DAYS = _env_int("SWING_LOOKBACK_DAYS", 120)
+SWING_SUPPORT_ZONE_PCT = _env_float("SWING_SUPPORT_ZONE_PCT", 1.5)
+SWING_NEAR_SUPPORT_PCT = _env_float("SWING_NEAR_SUPPORT_PCT", 3.0)
+SWING_NEAR_PIVOT_PCT = _env_float("SWING_NEAR_PIVOT_PCT", 3.0)
+SWING_MIN_SCORE = _env_float("SWING_MIN_SCORE", 65.0)
+SWING_MIN_TREND_SCORE = _env_float("SWING_MIN_TREND_SCORE", 60.0)
+SWING_MAX_BASE_DEPTH_PCT = _env_float("SWING_MAX_BASE_DEPTH_PCT", 35.0)
+SWING_WATCHLIST_SIZE = _env_int("SWING_WATCHLIST_SIZE", 10)
+
+
+# ============================================================
 # NOTIFICATIONS
 # ============================================================
 

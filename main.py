@@ -73,10 +73,13 @@ from volume_analysis import (
     add_combined_volume_flags,
     calculate_volume_metrics,
 )
+from swing_setup_engine import add_swing_setup_metrics
 from watchlist import (
     create_watchlist_message,
     save_watchlist_message,
     select_watchlist_candidates,
+    select_swing_watchlist_candidates,
+    create_swing_watchlist_message,
 )
 
 
@@ -375,6 +378,7 @@ def main() -> None:
     results: list[
         dict[str, Any]
     ] = []
+    swing_data_by_symbol: dict[str, pd.DataFrame] = {}
     errors: list[
         dict[str, str]
     ] = []
@@ -409,6 +413,8 @@ def main() -> None:
                     ).strip(),
                 )
             )
+
+            swing_data_by_symbol[symbol] = data
 
             result = analyse_stock(
                 symbol=symbol,
@@ -592,6 +598,15 @@ def main() -> None:
         report = add_liquidity_gate(
             report
         )
+
+        report = add_swing_setup_metrics(
+            report,
+            swing_data_by_symbol,
+        )
+        logging.info(
+            "Swing setup engine completed | Qualified: %s",
+            int(report["Swing Setup Qualified"].sum()),
+        )
         logging.info(
             "Liquidity gate completed | Eligible: %s | "
             "Excluded: %s",
@@ -724,6 +739,9 @@ def main() -> None:
             watchlist,
             market_status,
         )
+        swing_watchlist = select_swing_watchlist_candidates(report)
+        swing_message = create_swing_watchlist_message(swing_watchlist)
+        watchlist_message = watchlist_message + "\n" + swing_message
 
         save_watchlist_message(
             watchlist_message,

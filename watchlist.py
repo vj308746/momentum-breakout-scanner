@@ -12,6 +12,7 @@ from config import (
     SHOW_EMA_PANEL,
     SHOW_VOLUME_PANEL,
     STOCK_UNIVERSE_NAME,
+    SWING_WATCHLIST_SIZE,
 )
 
 
@@ -177,6 +178,47 @@ def select_watchlist_candidates(
 
     return watchlist
 
+
+
+def select_swing_watchlist_candidates(report: pd.DataFrame) -> pd.DataFrame:
+    """Select strong-trend stocks near constructive support or a pivot."""
+    if "Swing Setup Qualified" not in report.columns:
+        return report.head(0).copy()
+    candidates = report[report["Swing Setup Qualified"].fillna(False).astype(bool)].copy()
+    if candidates.empty:
+        return candidates
+    candidates["Swing Priority Score"] = (
+        candidates["Swing Setup Score"].fillna(0) * 0.45
+        + candidates["Support Score"].fillna(0) * 0.25
+        + candidates.get("RS Score", pd.Series(0, index=candidates.index)).fillna(0) * 0.15
+        + candidates.get("Volume Score", pd.Series(0, index=candidates.index)).fillna(0) * 0.15
+    ).round(1)
+    return candidates.sort_values(
+        ["Swing Priority Score", "Swing Trend Score", "Support Score"],
+        ascending=[False, False, False],
+    ).head(SWING_WATCHLIST_SIZE).reset_index(drop=True)
+
+
+def create_swing_watchlist_message(swing_watchlist: pd.DataFrame) -> str:
+    lines = ["", "⭐ MINERVINI-STYLE SWING SETUPS", "Strong trend + support/pivot + constructive volume"]
+    if swing_watchlist.empty:
+        lines.append("No qualified swing setups today.")
+        return "\n".join(lines)
+    for i, (_, row) in enumerate(swing_watchlist.iterrows(), 1):
+        status = str(row.get("Swing Setup Status", "WATCH"))
+        icon = "🟢" if status == "NEAR SUPPORT" else "🟡" if status == "NEAR PIVOT" else "🔵"
+        support = row.get("Support Price")
+        pivot = row.get("Pivot Resistance")
+        lines.extend([
+            f"{i}. {row.get('Symbol', '')} | {icon} {status}",
+            f"CMP ₹{float(row.get('Current Price', 0) or 0):.2f} | Swing Score {float(row.get('Swing Setup Score', 0) or 0):.1f}/100",
+            f"Support ₹{float(support):.2f} | Dist {float(row.get('Support Distance %', 0) or 0):+.2f}% | Touches {int(row.get('Support Touches', 0) or 0)}" if pd.notna(support) else "Support: N/A",
+            f"Pivot ₹{float(pivot):.2f} | Dist {float(row.get('Pivot Distance %', 0) or 0):.2f}%" if pd.notna(pivot) else "Pivot: N/A",
+            f"Trend {float(row.get('Swing Trend Score', 0) or 0):.0f} | Support {float(row.get('Support Score', 0) or 0):.0f} | Volume {float(row.get('Swing Volume Ratio', 0) or 0):.2f}x | {row.get('Support Price Behaviour', 'N/A')}",
+            "",
+        ])
+    lines.append("Setup is a watchlist signal, not an automatic buy. Confirm price action and risk before entry.")
+    return "\n".join(lines)
 
 def _action_icon(
     action: str,

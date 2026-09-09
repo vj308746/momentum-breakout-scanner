@@ -158,6 +158,19 @@ def create_excel_report(
             "Base Stage Pass",
             "Current Price",
             "Current Price Source",
+            "Swing Setup Status",
+            "Swing Setup Score",
+            "Swing Trend Score",
+            "Support Score",
+            "Support Zone Low",
+            "Support Zone High",
+            "Support Price",
+            "Support Distance %",
+            "Support Touches",
+            "Pivot Resistance",
+            "Pivot Distance %",
+            "Swing Volume Ratio",
+            "Support Price Behaviour",
             "Action",
             "Entry Window",
             "Live Extension %",
@@ -249,6 +262,9 @@ def create_excel_report(
     ] = {
         "Decision Board": report[
             decision_columns
+        ],
+        "Swing Setups": report[
+            report.get("Swing Setup Qualified", pd.Series(False, index=report.index)).fillna(False).astype(bool)
         ],
         "Buy Now": report[
             report["Action"].eq(
