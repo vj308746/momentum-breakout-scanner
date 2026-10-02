@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import pandas as pd
+
+from config import STOCK_UNIVERSE_CSV_URL
+from live_breakout_engine import evaluate_breakout, state_to_dict
+from live_data import LiveUpstoxData
+
+
+@dataclass(frozen=True)
+class ScannerConfig:
+    max_symbols: int = 100
+    timeframe: str = "5m"
+    include_below_resistance: bool = False
+
+
+class RealTimeBreakoutScanner:
+    """Continuously evaluates the configured live candidate universe.
+
+    The scanner deliberately reuses the existing breakout engine. Candidate
+    selection is cheap; candle retrieval comes from the persistent Phase-3
+    market state, so the UI does not create REST requests per refresh.
+    """
+
+    def __init__(self, live: LiveUpstoxData) -> None:
+        self.live = live
+
+    @staticmethod
+    def _candidate_frame(report: pd.DataFrame, include_below: bool) -> pd.DataFrame:
+        if report is None or report.empty or "Symbol" not in report.columns:
+            return pd.DataFrame(columns=["Symbol"])
+        frame = report.copy()
+        frame["Symbol"] = frame["Symbol"].astype(str).str.upper().str.strip()
+        frame = frame[frame["Symbol"].ne("")].drop_duplicates("Symbol")
+        if not include_below and "Action" in frame.columns:
+            preferred = {"BUY NOW", "WATCH", "BUY ON BREAKOUT", "BREAKOUT / VOLUME PENDING"}
+            filtered = frame[frame["Action"].astype(str).isin(preferred)]
+            if not filtered.empty:
+                frame = filtered
+        if "Trade Quality Score" in frame.columns:
+            frame["_rank"] = pd.to_numeric(frame["Trade Quality Score"], errors="coerce").fillna(-1)
+            frame = frame.sort_values("_rank", ascending=False)
+        return frame
+
+    @staticmethod
+    def load_fallback_universe(limit: int) -> pd.DataFrame:
+        try:
+            frame = pd.read_csv(STOCK_UNIVERSE_CSV_URL)
+        except Exception:
+            return pd.DataFrame(columns=["Symbol"])
+        symbol_col = next((c for c in frame.columns if str(c).strip().lower() in {"symbol", "ticker"}), None)
+        if symbol_col is None:
+            return pd.DataFrame(columns=["Symbol"])
+        out = pd.DataFrame({"Symbol": frame[symbol_col].astype(str).str.upper().str.strip()})
+        return out[out["Symbol"].ne("")].drop_duplicates().head(limit)
+
+    def scan(self, report: pd.DataFrame, config: ScannerConfig) -> pd.DataFrame:
+        candidate = self._candidate_frame(report, config.include_below_resistance)
+        if candidate.empty:
+            candidate = self.load_fallback_universe(config.max_symbols)
+        candidate = candidate.head(config.max_symbols).copy()
+        symbols = candidate["Symbol"].tolist()
+        self.live.start_stream(symbols)
+
+        rows: list[dict[str, Any]] = []
+        report_by_symbol = candidate.set_index("Symbol", drop=False).to_dict("index") if not candidate.empty else {}
+        for symbol in symbols:
+            try:
+                candles = self.live.live_candles(symbol, config.timeframe)
+                result = evaluate_breakout(candles)
+                row = {"Symbol": symbol, **state_to_dict(result)}
+                row["CMP"] = float(candles["Close"].iloc[-1])
+                row["Candle Time"] = candles.index[-1]
+                meta = report_by_symbol.get(symbol, {})
+                for key in (
+                    "Trade Quality Score", "Confidence Score", "RS Score", "Sector RS Score",
+                    "Volume Score", "VCP Score", "Trend Template Pass", "Primary Pattern",
+                    "Action", "Trade Grade", "Pivot Resistance", "Pattern Confidence",
+                ):
+                    if key in meta:
+                        row[key] = meta[key]
+                rows.append(row)
+            except Exception as exc:
+                rows.append({"Symbol": symbol, "State": "DATA ERROR", "Reason": str(exc)})
+        return pd.DataFrame(rows)

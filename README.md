@@ -110,3 +110,7 @@ Open `Actions → Momentum Breakout Scan → Run workflow`.
 Download the `momentum-breakout-scan-*` artifact after completion.
 
 The Minervini repository is not modified by this project.
+
+## Current terminal architecture
+
+Phases 4, 5, 6 and 8 are implemented in the live terminal. Phase 7 (trade planner + Telegram alerts) is intentionally not part of this release.

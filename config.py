@@ -101,10 +101,19 @@ UPSTOX_API_SECRET = os.getenv(
     "",
 ).strip()
 
-UPSTOX_ACCESS_TOKEN = os.getenv(
-    "UPSTOX_ACCESS_TOKEN",
-    "",
-).strip()
+def _streamlit_secret(name: str) -> str:
+    try:
+        import streamlit as st
+        value = st.secrets.get(name, "")
+        return str(value).strip() if value is not None else ""
+    except Exception:
+        return ""
+
+
+UPSTOX_ACCESS_TOKEN = (
+    os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+    or _streamlit_secret("UPSTOX_ACCESS_TOKEN")
+)
 
 UPSTOX_REDIRECT_URI = os.getenv(
     "UPSTOX_REDIRECT_URI",
@@ -129,6 +138,16 @@ UPSTOX_INSTRUMENT_CACHE_HOURS = 18
 UPSTOX_REQUEST_TIMEOUT_SECONDS = 30
 UPSTOX_MAX_RETRIES = 3
 UPSTOX_RETRY_BACKOFF_SECONDS = 1.0
+UPSTOX_WS_RECONNECT_SECONDS = _env_float("UPSTOX_WS_RECONNECT_SECONDS", 5.0)
+UPSTOX_WS_MAX_INSTRUMENTS = _env_int("UPSTOX_WS_MAX_INSTRUMENTS", 1500)
+UPSTOX_WS_MODE = os.getenv("UPSTOX_WS_MODE", "full").strip().lower()
+
+# Live terminal scanner. Full V3 mode supports up to 1500 combined
+# instrument keys for a normal user; the scanner deliberately uses a smaller
+# working set by default to keep candle warm-up and memory predictable.
+LIVE_SCANNER_MAX_SYMBOLS = _env_int("LIVE_SCANNER_MAX_SYMBOLS", 100)
+LIVE_SCANNER_TIMEFRAME = os.getenv("LIVE_SCANNER_TIMEFRAME", "5m").strip()
+LIVE_SCANNER_STALE_SECONDS = _env_int("LIVE_SCANNER_STALE_SECONDS", 15)
 UPSTOX_HISTORY_UNIT = "days"
 UPSTOX_HISTORY_INTERVAL = 1
 UPSTOX_HISTORY_CALENDAR_DAYS = 1100

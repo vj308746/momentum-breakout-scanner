@@ -257,6 +257,23 @@ class UpstoxClient:
 
         return candles
 
+    def get_intraday_candles(
+        self,
+        instrument_key: str,
+        unit: str,
+        interval: int,
+    ) -> list[list[Any]]:
+        encoded_key = quote(instrument_key, safe="")
+        path = (
+            "/v3/historical-candle/intraday/"
+            f"{encoded_key}/{unit}/{interval}"
+        )
+        payload = self.get_json(path)
+        candles = payload.get("data", {}).get("candles", [])
+        if not isinstance(candles, list):
+            raise UpstoxAPIError("Upstox intraday candle response has an invalid structure.")
+        return candles
+
     def get_ltp(
         self,
         instrument_keys: list[str],
