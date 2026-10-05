@@ -13,6 +13,7 @@ from config import (
     LIVE_SCANNER_MAX_SYMBOLS,
     LIVE_SCANNER_STALE_SECONDS,
     LIVE_SCANNER_TIMEFRAME,
+    LIVE_SCANNER_WARMUP_WORKERS,
     OUTPUT_FILE,
     UPSTOX_ACCESS_TOKEN,
 )
@@ -80,7 +81,15 @@ if auto_refresh:
 
 live = get_live_data()
 service = get_scanner_service(live)
-service.configure(all_stocks, ScannerConfig(max_symbols=max_symbols, timeframe=timeframe, include_below_resistance=include_below))
+service.configure(
+    all_stocks,
+    ScannerConfig(
+        max_symbols=max_symbols,
+        timeframe=timeframe,
+        include_below_resistance=include_below,
+        warmup_workers=LIVE_SCANNER_WARMUP_WORKERS,
+    ),
+)
 
 health = health_snapshot(live.state, stale_after_seconds=LIVE_SCANNER_STALE_SECONDS)
 
