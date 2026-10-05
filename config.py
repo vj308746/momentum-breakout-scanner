@@ -141,6 +141,7 @@ UPSTOX_RETRY_BACKOFF_SECONDS = 1.0
 UPSTOX_WS_RECONNECT_SECONDS = _env_float("UPSTOX_WS_RECONNECT_SECONDS", 5.0)
 UPSTOX_WS_MAX_INSTRUMENTS = _env_int("UPSTOX_WS_MAX_INSTRUMENTS", 1500)
 UPSTOX_WS_MODE = os.getenv("UPSTOX_WS_MODE", "full").strip().lower()
+LIVE_SCANNER_WARMUP_WORKERS = _env_int("LIVE_SCANNER_WARMUP_WORKERS", 4)
 
 # Live terminal scanner. Full V3 mode supports up to 1500 combined
 # instrument keys for a normal user; the scanner deliberately uses a smaller
