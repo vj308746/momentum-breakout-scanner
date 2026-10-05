@@ -30,6 +30,9 @@ class LiveScannerService:
         self._last_scan_at = 0.0
         self._last_error = ""
         self._scan_count = 0
+        self._scan_started_at = 0.0
+        self._scan_in_progress = False
+        self._scan_duration_seconds = 0.0
 
     def configure(self, report: pd.DataFrame, config: ScannerConfig) -> None:
         with self._lock:
@@ -53,6 +56,9 @@ class LiveScannerService:
             with self._lock:
                 report = self._report.copy()
                 config = self._config
+            with self._lock:
+                self._scan_started_at = started
+                self._scan_in_progress = True
             try:
                 result = self.scanner.scan(report, config)
                 result = enrich(result)
@@ -61,10 +67,14 @@ class LiveScannerService:
                     self._last_error = ""
                     self._last_scan_at = time.time()
                     self._scan_count += 1
+                    self._scan_duration_seconds = time.time() - started
             except Exception as exc:
                 with self._lock:
                     self._last_error = str(exc)
                     self._last_scan_at = time.time()
+            finally:
+                with self._lock:
+                    self._scan_in_progress = False
             elapsed = time.time() - started
             self._stop.wait(max(0.25, self.interval_seconds - elapsed))
 
@@ -80,4 +90,7 @@ class LiveScannerService:
                 "last_error": self._last_error,
                 "scan_count": self._scan_count,
                 "symbols": len(self._results),
+                "scan_in_progress": self._scan_in_progress,
+                "scan_started_at": self._scan_started_at,
+                "scan_duration_seconds": self._scan_duration_seconds,
             }
