@@ -36,11 +36,23 @@ The Streamlit application now has:
 
 `production_monitor.py` detects stale feed state and exposes:
 - WebSocket connection status
-- feed freshness
-- subscription count
+- requested instrument count
+- subscribed instrument count
+- instruments that have actually produced live data
+- true live-feed freshness
 - scanner process status
 - scan cycle count
 - last WebSocket error
-- last scanner error
+- subscription/mapping error count
+- scanner warm-up progress and duration
 
-The WebSocket reconnect behavior remains automatic. The terminal does not place orders or send alerts in this release.
+The WebSocket lifecycle now:
+- subscribes immediately after connection
+- applies subscription changes from the WebSocket worker thread
+- replays the desired instrument set after reconnect
+- keeps requested/subscribed/live state separate
+- tracks decoded instrument updates separately from generic WebSocket messages
+
+The live scanner also uses bounded parallel historical warm-up so the first scan does not depend on a long serial sequence of REST calls. Individual symbol failures remain isolated as `DATA ERROR` rows.
+
+The terminal does not place orders or send alerts in this release.
