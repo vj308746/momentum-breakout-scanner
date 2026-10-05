@@ -71,7 +71,6 @@ class LiveUpstoxData:
 
     def live_candles(self, symbol: str, timeframe: str, days: int = 30) -> pd.DataFrame:
         if timeframe in {"5m", "15m", "30m", "1H"}:
-            self.state.subscribe([symbol])
             return self.state.candles(symbol, timeframe)
         return self.candles(symbol, timeframe, days)
 
