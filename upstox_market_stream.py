@@ -18,6 +18,7 @@ from config import (
     UPSTOX_API_BASE_URL,
     UPSTOX_REQUEST_TIMEOUT_SECONDS,
     UPSTOX_WS_MAX_INSTRUMENTS,
+    UPSTOX_WS_MODE,
     UPSTOX_WS_RECONNECT_SECONDS,
 )
 
@@ -93,28 +94,55 @@ class UpstoxMarketStream:
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._ws = None
+        self._subscribed_instruments: set[str] = set()
         self.connected = False
         self.last_error = ""
         self.last_message_at = 0.0
+        self.last_live_message_at = 0.0
+        self.last_subscription_at = 0.0
+        self.subscription_requests = 0
 
     def set_instruments(self, instruments: list[str]) -> None:
         clean = {x.strip() for x in instruments if x and x.strip()}
         if len(clean) > UPSTOX_WS_MAX_INSTRUMENTS:
             clean = set(sorted(clean)[:UPSTOX_WS_MAX_INSTRUMENTS])
         with self._lock:
-            old = set(self._instruments)
-            changed = clean != old
+            changed = clean != self._instruments
             self._instruments = clean
-        if changed and self._ws is not None:
-            try:
-                removed = sorted(old - clean)
-                added = sorted(clean - old)
-                if removed:
-                    self._send_subscription("unsub", removed)
-                if added:
-                    self._send_subscription("sub", added)
-            except Exception:
-                self._wake.set()
+        # Socket writes stay inside the WebSocket worker thread.
+        if changed:
+            self._wake.set()
+
+    def requested_instruments(self) -> set[str]:
+        with self._lock:
+            return set(self._instruments)
+
+    def subscribed_instruments(self) -> set[str]:
+        with self._lock:
+            return set(self._subscribed_instruments)
+
+    def live_instruments(self) -> set[str]:
+        with self._lock:
+            return set(self._data)
+
+    @staticmethod
+    def _chunks(values: list[str], size: int = 500) -> list[list[str]]:
+        return [values[i:i + size] for i in range(0, len(values), size)]
+
+    def _sync_subscriptions(self) -> None:
+        with self._lock:
+            desired = set(self._instruments)
+            subscribed = set(self._subscribed_instruments)
+        removed = sorted(subscribed - desired)
+        added = sorted(desired - subscribed)
+        for chunk in self._chunks(removed):
+            self._send_subscription("unsub", chunk)
+        for chunk in self._chunks(added):
+            self._send_subscription("sub", chunk)
+        with self._lock:
+            self._subscribed_instruments = desired
+            self.last_subscription_at = time.time()
+            self.subscription_requests += len(self._chunks(removed)) + len(self._chunks(added))
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive(): return
@@ -139,42 +167,84 @@ class UpstoxMarketStream:
         return uri
 
     def _send_subscription(self, method: str, keys: list[str]) -> None:
-        if not self._ws or not keys: return
-        payload={"guid":uuid.uuid4().hex,"method":method,"data":{"mode":"full","instrumentKeys":keys}}
+        if not self._ws or not keys:
+            return
+        mode = UPSTOX_WS_MODE if UPSTOX_WS_MODE in {"ltpc", "full", "full_d30", "option_greeks"} else "full"
+        payload = {
+            "guid": uuid.uuid4().hex,
+            "method": method,
+            "data": {"mode": mode, "instrumentKeys": keys},
+        }
         self._ws.send(json.dumps(payload).encode("utf-8"))
 
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
                 uri=self._authorize()
-                with websockets.sync.client.connect(uri, open_timeout=10, close_timeout=2, ping_interval=20, ping_timeout=20, max_size=None) as ws:
-                    self._ws=ws; self.connected=True; self.last_error=""
-                    with self._lock: keys=list(self._instruments)
-                    self._send_subscription("sub", keys)
+                with websockets.sync.client.connect(
+                    uri,
+                    open_timeout=10,
+                    close_timeout=2,
+                    ping_interval=20,
+                    ping_timeout=20,
+                    max_size=None,
+                ) as ws:
+                    self._ws = ws
+                    self.connected = True
+                    self.last_error = ""
+                    with self._lock:
+                        self._subscribed_instruments = set()
+
+                    # Upstox recommends subscribing immediately after open.
+                    self._sync_subscriptions()
+
                     while not self._stop.is_set():
                         try:
-                            raw=ws.recv(timeout=2)
+                            raw = ws.recv(timeout=2)
                         except TimeoutError:
-                            continue
-                        if raw is None: continue
-                        self._handle(raw); self.last_message_at=time.time()
+                            raw = None
+                        if raw is not None:
+                            updated = self._handle(raw)
+                            self.last_message_at = time.time()
+                            if updated:
+                                self.last_live_message_at = time.time()
                         if self._wake.is_set():
                             self._wake.clear()
-                            with self._lock: current=list(self._instruments)
-                            self._send_subscription("sub", current)
+                            self._sync_subscriptions()
             except Exception as exc:
                 self.last_error=str(exc); logging.warning("Upstox websocket: %s", exc)
                 time.sleep(UPSTOX_WS_RECONNECT_SECONDS)
             finally:
-                self.connected=False; self._ws=None
+                self.connected = False
+                self._ws = None
+                with self._lock:
+                    self._subscribed_instruments = set()
 
-    def _handle(self, raw: bytes | str) -> None:
-        if not isinstance(raw,(bytes,bytearray)): return
-        cls=_feed_response_class(); response=cls(); response.ParseFromString(raw)
+    def requested_count(self) -> int:
+        return len(self.requested_instruments())
+
+    @property
+    def subscribed_count(self) -> int:
+        return len(self.subscribed_instruments())
+
+    @property
+    def live_count(self) -> int:
+        return len(self.live_instruments())
+
+    def _handle(self, raw: bytes | str) -> bool:
+        if not isinstance(raw, (bytes, bytearray)):
+            return False
+        cls = _feed_response_class()
+        response = cls()
+        response.ParseFromString(raw)
+        updated = False
         for key, feed in response.feeds.items():
-            item=self._extract_feed(feed)
+            item = self._extract_feed(feed)
             if item:
-                with self._lock: self._data[key]=item
+                with self._lock:
+                    self._data[key] = item
+                updated = True
+        return updated
 
     @staticmethod
     def _extract_feed(feed: Any) -> dict[str, Any]:
