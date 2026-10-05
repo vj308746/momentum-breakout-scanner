@@ -220,6 +220,7 @@ class UpstoxMarketStream:
                 with self._lock:
                     self._subscribed_instruments = set()
 
+    @property
     def requested_count(self) -> int:
         return len(self.requested_instruments())
 
