@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +16,7 @@ class ScannerConfig:
     max_symbols: int = 100
     timeframe: str = "5m"
     include_below_resistance: bool = False
+    warmup_workers: int = 4
 
 
 class RealTimeBreakoutScanner:
@@ -65,9 +67,9 @@ class RealTimeBreakoutScanner:
         symbols = candidate["Symbol"].tolist()
         self.live.start_stream(symbols)
 
-        rows: list[dict[str, Any]] = []
         report_by_symbol = candidate.set_index("Symbol", drop=False).to_dict("index") if not candidate.empty else {}
-        for symbol in symbols:
+
+        def evaluate_symbol(symbol: str) -> dict[str, Any]:
             try:
                 candles = self.live.live_candles(symbol, config.timeframe)
                 result = evaluate_breakout(candles)
@@ -82,7 +84,22 @@ class RealTimeBreakoutScanner:
                 ):
                     if key in meta:
                         row[key] = meta[key]
-                rows.append(row)
+                return row
             except Exception as exc:
-                rows.append({"Symbol": symbol, "State": "DATA ERROR", "Reason": str(exc)})
+                return {"Symbol": symbol, "State": "DATA ERROR", "Reason": str(exc)}
+
+        workers = max(1, min(int(config.warmup_workers), max(1, len(symbols))))
+        if workers == 1:
+            rows = [evaluate_symbol(symbol) for symbol in symbols]
+        else:
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="live-warmup") as pool:
+                futures = {pool.submit(evaluate_symbol, symbol): symbol for symbol in symbols}
+                completed: dict[str, dict[str, Any]] = {}
+                for future in as_completed(futures):
+                    symbol = futures[future]
+                    try:
+                        completed[symbol] = future.result()
+                    except Exception as exc:
+                        completed[symbol] = {"Symbol": symbol, "State": "DATA ERROR", "Reason": str(exc)}
+                rows = [completed[symbol] for symbol in symbols]
         return pd.DataFrame(rows)
