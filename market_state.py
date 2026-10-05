@@ -29,19 +29,28 @@ class LiveMarketState:
         self._history_loaded_at: dict[str, float] = {}
         self._symbols: dict[str, str] = {}
         self._last_warmup_error: dict[str, str] = {}
+        self._subscription_errors: dict[str, str] = {}
 
     def start(self) -> None:
         self.stream.start()
 
     def subscribe(self, symbols: list[str]) -> None:
         keys: list[str] = []
+        errors: dict[str, str] = {}
         for symbol in symbols:
             symbol = str(symbol).strip().upper()
             if not symbol:
                 continue
-            key = self.mapper.resolve(symbol)
-            self._symbols[symbol] = key
-            keys.append(key)
+            try:
+                key = self.mapper.resolve(symbol)
+                self._symbols[symbol] = key
+                keys.append(key)
+            except Exception as exc:
+                errors[symbol] = str(exc)
+
+        with self._lock:
+            self._subscription_errors.update(errors)
+
         if keys:
             self.stream.set_instruments(sorted(set(self._symbols.values())))
             self.stream.start()
@@ -51,7 +60,11 @@ class LiveMarketState:
             "connected": self.stream.connected,
             "last_error": self.stream.last_error,
             "last_message_at": self.stream.last_message_at,
-            "subscribed": len(self.stream.snapshot()),
+            "last_live_message_at": self.stream.last_live_message_at,
+            "requested": self.stream.requested_count,
+            "subscribed": self.stream.subscribed_count,
+            "live": self.stream.live_count,
+            "subscription_errors": len(self._subscription_errors),
         }
 
     def snapshot(self, symbol: str) -> dict[str, Any]:
