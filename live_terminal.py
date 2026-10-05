@@ -85,13 +85,14 @@ service.configure(all_stocks, ScannerConfig(max_symbols=max_symbols, timeframe=t
 health = health_snapshot(live.state, stale_after_seconds=LIVE_SCANNER_STALE_SECONDS)
 
 # Header/status strip.
-h1, h2, h3, h4, h5 = st.columns(5)
+h1, h2, h3, h4, h5, h6 = st.columns(6)
 h1.metric("Feed", "LIVE" if health.connected and not health.stale else "DEGRADED")
-h2.metric("Subscribed", health.subscribed)
-h3.metric("Last tick", f"{health.last_message_age_seconds:.1f}s" if health.last_message_age_seconds is not None else "—")
+h2.metric("Requested", health.requested)
+h3.metric("Live", health.live)
+h4.metric("Last live tick", f"{health.last_message_age_seconds:.1f}s" if health.last_message_age_seconds is not None else "—")
 svc_status = service.status()
-h4.metric("Scan cycles", svc_status["scan_count"])
-h5.metric("Live symbols", svc_status["symbols"])
+h5.metric("Scan cycles", svc_status["scan_count"])
+h6.metric("Live rows", svc_status["symbols"])
 
 if page == "Market Scanner":
     st.title("Momentum Breakout Terminal")
@@ -191,10 +192,16 @@ else:
         st.error("Market feed is stale or disconnected. The WebSocket service will reconnect automatically.")
     else:
         st.success("Market feed is healthy.")
+    if h.requested and not h.live:
+        st.warning(f"{h.requested} instruments are requested, but no live instrument data has been received yet.")
+    if h.subscription_errors:
+        st.warning(f"{h.subscription_errors} instrument mapping errors were skipped.")
     if h.last_error:
         st.warning(f"WebSocket last error: {h.last_error}")
     if s["last_error"]:
         st.warning(f"Scanner last error: {s['last_error']}")
+    if s["scan_in_progress"]:
+        st.info("Scanner is warming historical candles and evaluating the live universe in the background.")
     st.subheader("Architecture")
     st.code("Upstox V3 WebSocket → LiveMarketState → Background Scanner → Confirmation Engine → Streamlit UI", language="text")
     st.subheader("Operational notes")
