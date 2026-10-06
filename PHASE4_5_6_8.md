@@ -55,4 +55,10 @@ The WebSocket lifecycle now:
 
 The live scanner also uses bounded parallel historical warm-up so the first scan does not depend on a long serial sequence of REST calls. Individual symbol failures remain isolated as `DATA ERROR` rows.
 
+Warm-up and scan efficiency:
+- A successful 1-minute history warm-up is cached for the current India trading date instead of expiring after 10 minutes.
+- The background scanner defaults to a 15-second scan cadence; the UI refresh cadence remains independent.
+- Completed symbols are published progressively, so the dashboard can show live rows before the entire universe finishes evaluating.
+- After the session warm-up, repeated scans use the in-memory candle history plus WebSocket updates rather than re-fetching intraday history for every symbol.
+
 The terminal does not place orders or send alerts in this release.
