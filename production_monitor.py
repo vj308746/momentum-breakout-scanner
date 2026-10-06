@@ -24,7 +24,9 @@ def snapshot(state: LiveMarketState, stale_after_seconds: int = 15) -> HealthSna
     # Market-info/heartbeat messages are not proof that instrument data is live.
     last = float(status.get("last_live_message_at") or 0)
     age = time.time() - last if last else None
-    stale = bool(age is not None and age > stale_after_seconds)
+    # A connected socket with no decoded instrument tick is not a
+    # healthy market feed. Treat missing live data as stale.
+    stale = age is None or age > stale_after_seconds
     if not status.get("connected"):
         stale = True
     return HealthSnapshot(
