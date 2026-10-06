@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -115,7 +115,12 @@ class RealTimeBreakoutScanner:
             self.live.start_stream(symbols)
         return symbols
 
-    def scan(self, report: pd.DataFrame, config: ScannerConfig) -> pd.DataFrame:
+    def scan(
+        self,
+        report: pd.DataFrame,
+        config: ScannerConfig,
+        on_result: Callable[[dict[str, Any]], None] | None = None,
+    ) -> pd.DataFrame:
         candidate = self._candidate_frame(report, config.include_below_resistance)
         if candidate.empty:
             candidate = self.load_fallback_universe(config.max_symbols)
@@ -146,7 +151,12 @@ class RealTimeBreakoutScanner:
 
         workers = max(1, min(int(config.warmup_workers), max(1, len(symbols))))
         if workers == 1:
-            rows = [evaluate_symbol(symbol) for symbol in symbols]
+            rows = []
+            for symbol in symbols:
+                row = evaluate_symbol(symbol)
+                rows.append(row)
+                if on_result is not None:
+                    on_result(row)
         else:
             with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="live-warmup") as pool:
                 futures = {pool.submit(evaluate_symbol, symbol): symbol for symbol in symbols}
@@ -154,8 +164,11 @@ class RealTimeBreakoutScanner:
                 for future in as_completed(futures):
                     symbol = futures[future]
                     try:
-                        completed[symbol] = future.result()
+                        row = future.result()
                     except Exception as exc:
-                        completed[symbol] = {"Symbol": symbol, "State": "DATA ERROR", "Reason": str(exc)}
+                        row = {"Symbol": symbol, "State": "DATA ERROR", "Reason": str(exc)}
+                    completed[symbol] = row
+                    if on_result is not None:
+                        on_result(row)
                 rows = [completed[symbol] for symbol in symbols]
         return pd.DataFrame(rows)
