@@ -47,17 +47,51 @@ class RealTimeBreakoutScanner:
             frame = frame.sort_values("_rank", ascending=False)
         return frame
 
-    @staticmethod
-    def load_fallback_universe(limit: int) -> pd.DataFrame:
+    def load_fallback_universe(self, limit: int) -> pd.DataFrame:
+        # Prefer the already-loaded Upstox instrument master. This avoids
+        # blocking the background scanner on the external Nifty Indices CSV,
+        # which is not required for live streaming.
+        try:
+            frame = self.live.mapper.instruments.copy()
+            if "trading_symbol" in frame.columns:
+                if "segment" in frame.columns:
+                    frame = frame[frame["segment"].astype(str).str.upper().eq("NSE_EQ")]
+                if "instrument_type" in frame.columns:
+                    preferred = frame[
+                        frame["instrument_type"].astype(str).str.upper().isin({"EQ", "EQUITY"})
+                    ]
+                    if not preferred.empty:
+                        frame = preferred
+                symbols = (
+                    frame["trading_symbol"]
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
+                )
+                out = pd.DataFrame({"Symbol": symbols})
+                out = out[out["Symbol"].ne("")].drop_duplicates()
+                if not out.empty:
+                    return out.head(limit)
+        except Exception:
+            pass
+
+        # Secondary fallback for environments where the mapper master is
+        # unavailable. Keep this as a last resort because the external CSV
+        # can be slow or blocked by the hosting environment.
         try:
             frame = pd.read_csv(STOCK_UNIVERSE_CSV_URL)
+            symbol_col = next(
+                (c for c in frame.columns if str(c).strip().lower() in {"symbol", "ticker"}),
+                None,
+            )
+            if symbol_col is not None:
+                out = pd.DataFrame({
+                    "Symbol": frame[symbol_col].astype(str).str.upper().str.strip()
+                })
+                return out[out["Symbol"].ne("")].drop_duplicates().head(limit)
         except Exception:
-            return pd.DataFrame(columns=["Symbol"])
-        symbol_col = next((c for c in frame.columns if str(c).strip().lower() in {"symbol", "ticker"}), None)
-        if symbol_col is None:
-            return pd.DataFrame(columns=["Symbol"])
-        out = pd.DataFrame({"Symbol": frame[symbol_col].astype(str).str.upper().str.strip()})
-        return out[out["Symbol"].ne("")].drop_duplicates().head(limit)
+            pass
+        return pd.DataFrame(columns=["Symbol"])
 
     def scan(self, report: pd.DataFrame, config: ScannerConfig) -> pd.DataFrame:
         candidate = self._candidate_frame(report, config.include_below_resistance)
