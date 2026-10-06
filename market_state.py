@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import threading
-import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from copy import deepcopy
 from typing import Any
 
@@ -26,7 +27,7 @@ class LiveMarketState:
         self.stream = UpstoxMarketStream(self.client.access_token)
         self._lock = threading.RLock()
         self._history: dict[str, pd.DataFrame] = {}
-        self._history_loaded_at: dict[str, float] = {}
+        self._history_session: dict[str, str] = {}
         self._symbols: dict[str, str] = {}
         self._last_warmup_error: dict[str, str] = {}
         self._subscription_errors: dict[str, str] = {}
@@ -71,13 +72,29 @@ class LiveMarketState:
         key = self.mapper.resolve(symbol)
         return self.stream.snapshot().get(key, {})
 
+    @staticmethod
+    def _trading_session_key() -> str:
+        """Return the India trading date used for the in-memory warm-up cache."""
+        return datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+
+    def warmup_status(self) -> dict[str, int | str]:
+        session = self._trading_session_key()
+        with self._lock:
+            warmed = sum(1 for key in self._history if self._history_session.get(key) == session)
+            errors = len(self._last_warmup_error)
+        return {
+            "session": session,
+            "warmed": warmed,
+            "errors": errors,
+        }
+
     def _warmup(self, symbol: str) -> pd.DataFrame:
         key = self.mapper.resolve(symbol)
-        now = time.time()
+        session = self._trading_session_key()
         with self._lock:
             existing = self._history.get(key)
-            loaded = self._history_loaded_at.get(key, 0)
-            if existing is not None and now - loaded < 600:
+            loaded_session = self._history_session.get(key)
+            if existing is not None and loaded_session == session:
                 return existing.copy()
 
         raw = self.client.get_intraday_candles(key, "minutes", 1)
@@ -85,7 +102,7 @@ class LiveMarketState:
         frame = candles_to_dataframe(raw)
         with self._lock:
             self._history[key] = frame.copy()
-            self._history_loaded_at[key] = now
+            self._history_session[key] = session
             self._last_warmup_error.pop(key, None)
         return frame
 
