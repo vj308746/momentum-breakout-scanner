@@ -49,7 +49,7 @@ def get_live_data() -> LiveUpstoxData:
 
 @st.cache_resource(show_spinner=False)
 def get_scanner_service(_live: LiveUpstoxData) -> LiveScannerService:
-    return LiveScannerService(_live, interval_seconds=3.0)
+    return LiveScannerService(_live, interval_seconds=15.0)
 
 
 report_path = Path(OUTPUT_FILE)
@@ -112,6 +112,13 @@ if page == "Market Scanner":
         st.warning("Daily report is unavailable. The terminal is using the local Upstox NSE instrument universe.")
     if service.status()["last_error"]:
         st.error(f"Scanner: {service.status()['last_error']}")
+    warm = live.state.warmup_status()
+    svc = service.status()
+    if svc["scan_in_progress"]:
+        st.caption(
+            f"Warm-up progress: {warm['warmed']}/{max_symbols} symbols loaded for "
+            f"session {warm['session']}. Results appear progressively while the scanner runs."
+        )
 
     df = service.snapshot()
     if df.empty:
