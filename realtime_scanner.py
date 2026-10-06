@@ -93,6 +93,28 @@ class RealTimeBreakoutScanner:
             pass
         return pd.DataFrame(columns=["Symbol"])
 
+    def prepare_universe(self, report: pd.DataFrame, config: ScannerConfig) -> list[str]:
+        """Resolve and subscribe the live universe before historical warm-up starts."""
+        candidate = self._candidate_frame(report, config.include_below_resistance)
+        if candidate.empty:
+            candidate = self.load_fallback_universe(config.max_symbols)
+        if candidate.empty or "Symbol" not in candidate.columns:
+            return []
+        symbols = (
+            candidate["Symbol"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace("", pd.NA)
+            .dropna()
+            .drop_duplicates()
+            .head(config.max_symbols)
+            .tolist()
+        )
+        if symbols:
+            self.live.start_stream(symbols)
+        return symbols
+
     def scan(self, report: pd.DataFrame, config: ScannerConfig) -> pd.DataFrame:
         candidate = self._candidate_frame(report, config.include_below_resistance)
         if candidate.empty:
