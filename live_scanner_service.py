@@ -35,8 +35,16 @@ class LiveScannerService:
         self._scan_duration_seconds = 0.0
 
     def configure(self, report: pd.DataFrame, config: ScannerConfig) -> None:
+        report_copy = report.copy() if report is not None else pd.DataFrame()
+        # Subscribe first so the UI can observe a live universe immediately.
+        # Historical REST warm-up happens in the background scanner afterwards.
+        try:
+            self.scanner.prepare_universe(report_copy, config)
+        except Exception as exc:
+            with self._lock:
+                self._last_error = f"Universe preparation failed: {exc}"
         with self._lock:
-            self._report = report.copy() if report is not None else pd.DataFrame()
+            self._report = report_copy
             self._config = config
         self.start()
 
