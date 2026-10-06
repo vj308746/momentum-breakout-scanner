@@ -62,21 +62,25 @@ all_stocks = workbook.get("All Stocks", pd.DataFrame()).copy()
 with st.sidebar:
     st.header("Momentum Terminal")
     st.caption("Phase 4–8 architecture")
-    st.success("Upstox token detected") if UPSTOX_ACCESS_TOKEN else st.warning("UPSTOX_ACCESS_TOKEN is not configured")
+    if UPSTOX_ACCESS_TOKEN:
+        st.success("Upstox token detected")
+    else:
+        st.warning("UPSTOX_ACCESS_TOKEN is not configured")
     page = st.radio("View", ["Market Scanner", "Stock Detail", "System Health"], index=0)
     st.divider()
     timeframe = st.selectbox("Scanner timeframe", ["5m", "15m", "30m", "1H"], index=["5m", "15m", "30m", "1H"].index(LIVE_SCANNER_TIMEFRAME) if LIVE_SCANNER_TIMEFRAME in {"5m", "15m", "30m", "1H"} else 0)
     max_symbols = st.slider("Live universe", 20, min(500, max(20, LIVE_SCANNER_MAX_SYMBOLS * 2)), LIVE_SCANNER_MAX_SYMBOLS, 10)
     include_below = st.checkbox("Include below-resistance candidates", value=False)
-    auto_refresh = st.checkbox("Auto-refresh (2s)", value=True)
-    if st.button("Clear cached report", use_container_width=True):
+    refresh_choice = st.selectbox("Auto-refresh", ["Off", "2s", "5s", "10s", "30s"], index=2)
+    refresh_seconds = {"Off": 0, "2s": 2, "5s": 5, "10s": 10, "30s": 30}[refresh_choice]
+    if st.button("Clear cached report", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
-if auto_refresh:
+if refresh_seconds:
     try:
         from streamlit_autorefresh import st_autorefresh
-        st_autorefresh(interval=2_000, key="phase4_terminal_refresh")
+        st_autorefresh(interval=refresh_seconds * 1000, key="phase4_terminal_refresh")
     except ImportError:
         pass
 
@@ -125,14 +129,27 @@ if page == "Market Scanner":
     if df.empty:
         st.info("Waiting for the first live scan cycle. Historical warm-up can take longer on the first run.")
         st.stop()
+    all_rows = df.copy()
 
     states = ["STRONG BREAKOUT", "CONFIRMED BREAKOUT", "RETEST HELD", "RETEST", "TESTING RESISTANCE", "NEAR RESISTANCE", "BELOW RESISTANCE", "FAILED BREAKOUT", "DATA ERROR"]
-    state_filter = st.multiselect("State", states, default=["STRONG BREAKOUT", "CONFIRMED BREAKOUT", "RETEST HELD", "RETEST"])
-    conf_filter = st.multiselect("Confirmation", ["CONFIRMED", "WATCH", "EARLY", "FAILED"], default=["CONFIRMED", "WATCH"])
+    state_filter = st.multiselect("State", states, default=["STRONG BREAKOUT", "CONFIRMED BREAKOUT", "RETEST HELD", "RETEST"], key="state_filter")
+    conf_filter = st.multiselect("Confirmation", ["CONFIRMED", "WATCH", "EARLY", "FAILED"], default=["CONFIRMED", "WATCH"], key="conf_filter")
     if state_filter:
         df = df[df["State"].isin(state_filter)]
     if conf_filter and "Confirmation Status" in df.columns:
         df = df[df["Confirmation Status"].isin(conf_filter)]
+    if df.empty:
+        st.info(
+            f"{len(all_rows)} symbols are being scanned, but none match the State/Confirmation filters above. "
+            "Here is how the scanned symbols are currently distributed:"
+        )
+        if "State" in all_rows.columns:
+            st.dataframe(
+                all_rows["State"].value_counts().rename_axis("State").reset_index(name="Symbols"),
+                width="stretch",
+                hide_index=True,
+            )
+        st.stop()
     if "Confirmation Score" in df.columns:
         df = df.sort_values(["Confirmation Score", "Volume Ratio"], ascending=[False, False])
 
@@ -154,7 +171,7 @@ if page == "Market Scanner":
     for col in ["Confirmation Score", "Distance To Resistance %", "Breakout %", "Volume Ratio", "RS Score", "Trade Quality Score"]:
         if col in display:
             display[col] = pd.to_numeric(display[col], errors="coerce").round(2)
-    st.dataframe(display, use_container_width=True, hide_index=True, height=620)
+    st.dataframe(display, width="stretch", hide_index=True, height=620)
     st.caption("Confirmation is an additive screening layer over the existing breakout engine. It does not change the underlying pattern rules or place orders.")
 
 elif page == "Stock Detail":
@@ -192,8 +209,8 @@ elif page == "Stock Detail":
     chart.update_layout(height=680, xaxis_rangeslider_visible=False, legend=dict(orientation="h"), margin=dict(l=10, r=10, t=30, b=10))
     chart.update_yaxes(title_text="Price", secondary_y=False)
     chart.update_yaxes(title_text="Volume", secondary_y=True, showgrid=False)
-    st.plotly_chart(chart, use_container_width=True)
-    st.dataframe(pd.DataFrame([confirmation.to_dict()]), use_container_width=True, hide_index=True)
+    st.plotly_chart(chart, width="stretch")
+    st.dataframe(pd.DataFrame([confirmation.to_dict()]), width="stretch", hide_index=True)
 
 else:
     st.title("System Health & Monitoring")
