@@ -67,3 +67,55 @@ def test_health_uses_live_data_timestamp():
     assert health.stale is True
     assert health.requested == 2
     assert health.live == 0
+
+
+def test_warmup_is_cached_for_the_current_trading_session(monkeypatch):
+    import pandas as pd
+    from market_state import LiveMarketState
+
+    class FakeMapper:
+        def resolve(self, symbol):
+            return "NSE_EQ|FAKE"
+
+    class FakeClient:
+        access_token = "token"
+        def __init__(self):
+            self.calls = 0
+        def get_intraday_candles(self, key, unit, interval):
+            self.calls += 1
+            return [["2026-10-06T09:15:00+05:30", 100, 101, 99, 100.5, 1000, 0]]
+
+    state = LiveMarketState(client=FakeClient(), mapper=FakeMapper())
+    state.stream = type("Stream", (), {"snapshot": lambda self: {}})()
+    first = state._warmup("FAKE")
+    second = state._warmup("FAKE")
+
+    assert not first.empty
+    assert not second.empty
+    assert state.client.calls == 1
+    assert state.warmup_status()["warmed"] == 1
+
+
+def test_scanner_publishes_results_as_symbols_complete():
+    from realtime_scanner import RealTimeBreakoutScanner, ScannerConfig
+
+    class FakeLive:
+        def __init__(self):
+            self.mapper = type("Mapper", (), {"instruments": pd.DataFrame()})()
+            self.started = []
+        def start_stream(self, symbols):
+            self.started.extend(symbols)
+        def live_candles(self, symbol, timeframe):
+            return pd.DataFrame({
+                "Open": [100.0] * 30,
+                "High": [101.0] * 30,
+                "Low": [99.0] * 30,
+                "Close": [100.0] * 30,
+                "Volume": [1000.0] * 30,
+            }, index=pd.date_range("2026-10-06", periods=30, freq="min", tz="UTC"))
+
+    live = FakeLive()
+    scanner = RealTimeBreakoutScanner(live)
+    seen = []
+    scanner.scan(pd.DataFrame({"Symbol": ["AAA", "BBB"]}), ScannerConfig(max_symbols=2, warmup_workers=1), on_result=seen.append)
+    assert {row["Symbol"] for row in seen} == {"AAA", "BBB"}
