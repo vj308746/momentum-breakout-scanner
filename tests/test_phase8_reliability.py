@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import time
 
+import pandas as pd
+
 from production_monitor import snapshot
 from upstox_market_stream import UpstoxMarketStream
 
@@ -70,7 +72,6 @@ def test_health_uses_live_data_timestamp():
 
 
 def test_warmup_is_cached_for_the_current_trading_session(monkeypatch):
-    import pandas as pd
     from market_state import LiveMarketState
 
     class FakeMapper:
