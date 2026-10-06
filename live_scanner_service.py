@@ -17,7 +17,7 @@ class LiveScannerService:
     continues working even while a browser is not actively rerunning.
     """
 
-    def __init__(self, live, interval_seconds: float = 3.0) -> None:
+    def __init__(self, live, interval_seconds: float = 15.0) -> None:
         self.live = live
         self.scanner = RealTimeBreakoutScanner(live)
         self.interval_seconds = max(1.0, float(interval_seconds))
@@ -68,7 +68,25 @@ class LiveScannerService:
                 self._scan_started_at = started
                 self._scan_in_progress = True
             try:
-                result = self.scanner.scan(report, config)
+                first_partial = True
+
+                def publish_partial(row: dict[str, Any]) -> None:
+                    nonlocal first_partial
+                    try:
+                        partial = enrich(pd.DataFrame([row]))
+                    except Exception:
+                        partial = pd.DataFrame([row])
+                    with self._lock:
+                        current = self._results.copy()
+                        if first_partial:
+                            current = pd.DataFrame()
+                            first_partial = False
+                        if not current.empty and "Symbol" in current.columns and "Symbol" in partial.columns:
+                            symbol = str(partial.iloc[0]["Symbol"]).upper()
+                            current = current[current["Symbol"].astype(str).str.upper().ne(symbol)]
+                        self._results = pd.concat([current, partial], ignore_index=True)
+
+                result = self.scanner.scan(report, config, on_result=publish_partial)
                 result = enrich(result)
                 with self._lock:
                     self._results = result
