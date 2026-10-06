@@ -109,7 +109,7 @@ if page == "Market Scanner":
     if not all_stocks.empty:
         st.info(f"Daily scanner report is being used to prioritize the live universe. Up to {max_symbols} symbols are streamed continuously.")
     else:
-        st.warning("Daily report is unavailable. The terminal will fall back to the configured Nifty Total Market universe.")
+        st.warning("Daily report is unavailable. The terminal is using the local Upstox NSE instrument universe.")
     if service.status()["last_error"]:
         st.error(f"Scanner: {service.status()['last_error']}")
 
