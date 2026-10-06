@@ -119,4 +119,5 @@ class LiveScannerService:
                 "scan_in_progress": self._scan_in_progress,
                 "scan_started_at": self._scan_started_at,
                 "scan_duration_seconds": self._scan_duration_seconds,
+                "warmup": self.live.state.warmup_status(),
             }
