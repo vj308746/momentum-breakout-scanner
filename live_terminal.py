@@ -191,12 +191,13 @@ else:
     st.title("System Health & Monitoring")
     h = health_snapshot(live.state, stale_after_seconds=LIVE_SCANNER_STALE_SECONDS)
     s = service.status()
-    cards = st.columns(5)
+    cards = st.columns(6)
     cards[0].metric("WebSocket", "CONNECTED" if h.connected else "DISCONNECTED")
-    cards[1].metric("Feed freshness", f"{h.last_message_age_seconds:.1f}s" if h.last_message_age_seconds is not None else "—")
-    cards[2].metric("Subscribed", h.subscribed)
-    cards[3].metric("Scanner", "RUNNING" if s["running"] else "STOPPED")
-    cards[4].metric("Scan cycles", s["scan_count"])
+    cards[1].metric("Requested", h.requested)
+    cards[2].metric("Live", h.live)
+    cards[3].metric("Last live tick", f"{h.last_message_age_seconds:.1f}s" if h.last_message_age_seconds is not None else "—")
+    cards[4].metric("Scanner", "RUNNING" if s["running"] else "STOPPED")
+    cards[5].metric("Scan cycles", s["scan_count"])
     if h.stale:
         st.error("Market feed is stale or disconnected. The WebSocket service will reconnect automatically.")
     else:
