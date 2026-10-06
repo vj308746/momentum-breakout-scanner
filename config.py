@@ -139,14 +139,14 @@ UPSTOX_REQUEST_TIMEOUT_SECONDS = 30
 UPSTOX_MAX_RETRIES = 3
 UPSTOX_RETRY_BACKOFF_SECONDS = 1.0
 UPSTOX_WS_RECONNECT_SECONDS = _env_float("UPSTOX_WS_RECONNECT_SECONDS", 5.0)
-UPSTOX_WS_MAX_INSTRUMENTS = _env_int("UPSTOX_WS_MAX_INSTRUMENTS", 100)
+UPSTOX_WS_MAX_INSTRUMENTS = _env_int("UPSTOX_WS_MAX_INSTRUMENTS", 1500)
 UPSTOX_WS_MODE = os.getenv("UPSTOX_WS_MODE", "full").strip().lower()
 LIVE_SCANNER_WARMUP_WORKERS = _env_int("LIVE_SCANNER_WARMUP_WORKERS", 4)
 LIVE_SCANNER_INTERVAL_SECONDS = _env_float("LIVE_SCANNER_INTERVAL_SECONDS", 15.0)
 
-# Live terminal scanner. The current Market Data Feed supports up to 100
-# instrument keys per WebSocket connection; the scanner defaults to the full
-# documented limit while keeping warm-up work bounded.
+# Live terminal scanner. The current V3 feed supports substantially more
+# than the terminal's default 100-symbol working set; keep the working set
+# bounded for predictable warm-up and memory use.
 LIVE_SCANNER_MAX_SYMBOLS = _env_int("LIVE_SCANNER_MAX_SYMBOLS", 100)
 LIVE_SCANNER_TIMEFRAME = os.getenv("LIVE_SCANNER_TIMEFRAME", "5m").strip()
 LIVE_SCANNER_STALE_SECONDS = _env_int("LIVE_SCANNER_STALE_SECONDS", 15)
