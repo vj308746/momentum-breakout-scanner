@@ -14,6 +14,7 @@ from config import (
     LIVE_SCANNER_STALE_SECONDS,
     LIVE_SCANNER_TIMEFRAME,
     LIVE_SCANNER_WARMUP_WORKERS,
+    LIVE_SCANNER_INTERVAL_SECONDS,
     OUTPUT_FILE,
     UPSTOX_ACCESS_TOKEN,
 )
@@ -49,7 +50,7 @@ def get_live_data() -> LiveUpstoxData:
 
 @st.cache_resource(show_spinner=False)
 def get_scanner_service(_live: LiveUpstoxData) -> LiveScannerService:
-    return LiveScannerService(_live, interval_seconds=15.0)
+    return LiveScannerService(_live, interval_seconds=LIVE_SCANNER_INTERVAL_SECONDS)
 
 
 report_path = Path(OUTPUT_FILE)
